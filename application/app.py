@@ -106,7 +106,6 @@ def healthz():
 
 @app.route("/healthx")
 def healthx():
-    sleep(1);
     return "OK", 200
 
 if __name__ == "__main__":
