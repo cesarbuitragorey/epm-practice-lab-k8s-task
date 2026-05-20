@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application
+data:
+  MONGO_HOST: mongo
+  MONGO_PORT: "27017"
+  BG_COLOR: teal
+  FAIL_FLAG: "false"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongo
+type: Opaque
+data:
+  MONGO_INITDB_ROOT_USERNAME: cm9vdA==
+  MONGO_INITDB_ROOT_PASSWORD: ZXhhbXBsZQ==
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  labels:
+    app: mongo
+spec:
+  serviceName: mongo
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:5
+          ports:
+            - containerPort: 27017
+          resources:
+            requests:
+              cpu: "0.2"
+              memory: "128Mi"
+            limits:
+              cpu: "0.5"
+              memory: "256Mi"
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongo
+                  key: username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongo
+                  key: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+spec:
+  ports:
+    - port: 27017
+      targetPort: 27017
+  selector:
+    app: mongo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: application
+  labels:
+    app: application
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: application
+  template:
+    metadata:
+      labels:
+        app: application
+    spec:
+      imagePullSecrets:
+        - name: docker-secret
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox
+          command: ['sh', '-c', 'until nc -z mongo 27017; do sleep 2; done;']
+      containers:
+        - name: application
+          image: cesarbuitragorey/cesarbuitragorey.application.com
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              cpu: "0.2"
+              memory: "64Mi"
+            limits:
+              cpu: "0.5"
+              memory: "128Mi"
+          env:
+            - name: MONGO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongo
+                  key: username
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongo
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: application
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+          readinessProbe:
+            httpGet:
+              path: /healthx
+              port: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: application
+spec:
+  ports:
+    - port: 80
+      targetPort: 5000
+  selector:
+    app: application
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nginx
+spec:
+  rules:
+    - host: cesarbuitragorey.application.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: application
+                port:
+                  number: 80
