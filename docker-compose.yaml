@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   mongo:
-    image: mongo:5
+    image: mongo
     container_name: mongo
     ports:
       - "27017:27017"
@@ -11,7 +11,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
 
   application:
-    image: <dockerhub-user>/<nsurname>_application
+    image: cesarbuitrago/cbuitrago_application:latest
     container_name: application
     ports:
       - "5000:5000"

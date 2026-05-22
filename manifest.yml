@@ -1,3 +1,19 @@
+# -------------------
+# 1. SECRET MONGO
+# -------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongo
+type: Opaque
+data:
+  MONGO_INITDB_ROOT_USERNAME: cm9vdA==
+  MONGO_INITDB_ROOT_PASSWORD: ZXhhbXBsZQ==
+
+---
+# -------------------
+# 2. CONFIGMAP APPLICATION
+# -------------------
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -8,15 +24,24 @@ data:
   BG_COLOR: teal
   FAIL_FLAG: "false"
 ---
+# -------------------
+# 3. SERVICE MONGO
+# -------------------
 apiVersion: v1
-kind: Secret
+kind: Service
 metadata:
   name: mongo
-type: Opaque
-data:
-  MONGO_INITDB_ROOT_USERNAME: cm9vdA==
-  MONGO_INITDB_ROOT_PASSWORD: ZXhhbXBsZQ==
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: mongo
+
 ---
+# -------------------
+# 4. STATEFULSET MONGO
+# -------------------
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -36,16 +61,16 @@ spec:
     spec:
       containers:
         - name: mongo
-          image: mongo:5
+          image: mongo:5.0
           ports:
-            - containerPort: 27017
+            - containerPort: 80
           resources:
-            requests:
-              cpu: "0.2"
-              memory: "128Mi"
             limits:
               cpu: "0.5"
               memory: "256Mi"
+            requests:
+              cpu: "0.2"
+              memory: "128Mi"
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:
@@ -57,18 +82,11 @@ spec:
                 secretKeyRef:
                   name: mongo
                   key: MONGO_INITDB_ROOT_PASSWORD
+
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: mongo
-spec:
-  ports:
-    - port: 27017
-      targetPort: 27017
-  selector:
-    app: mongo
----
+# -------------------
+# 5. DEPLOYMENT APPLICATION
+# -------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -87,51 +105,52 @@ spec:
       labels:
         app: application
     spec:
-      imagePullSecrets:
-        - name: docker-secret
-      initContainers:
-        - name: wait-for-mongo
-          image: busybox
-          command: ['sh', '-c', 'until nc -z mongo 27017; do sleep 2; done;']
       containers:
         - name: application
-          image: cesarbuitrago/cesarbuitragorey_application:latest
+          image: cesarbuitrago/cbuitrago_application:latest
           ports:
-            - containerPort: 5000
+            - containerPort: 80
+
           resources:
-            requests:
-              cpu: "0.2"
-              memory: "64Mi"
             limits:
               cpu: "0.5"
               memory: "128Mi"
-
-          # ✅ CORREGIDO AQUÍ
-          env:
-            - name: MONGO_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: mongo
-                  key: MONGO_INITDB_ROOT_USERNAME
-
-            - name: MONGO_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mongo
-                  key: MONGO_INITDB_ROOT_PASSWORD
+            requests:
+              cpu: "0.2"
+              memory: "64Mi"
 
           envFrom:
             - configMapRef:
                 name: application
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 5000
+
           readinessProbe:
             httpGet:
-              path: /healthx
-              port: 5000
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+      initContainers:
+        - name: wait-for-mongo
+          image: busybox
+          command:
+            [
+              "sh",
+              "-c",
+              "until nc -z mongo 27017; do echo waiting for mongo; sleep 2; done;"
+            ]
+
 ---
+# -------------------
+# 6. SERVICE APPLICATION
+# -------------------
 apiVersion: v1
 kind: Service
 metadata:
@@ -139,17 +158,21 @@ metadata:
 spec:
   ports:
     - port: 80
-      targetPort: 5000
+      targetPort: 80
   selector:
     app: application
+
 ---
+# -------------------
+# 7. INGRESS
+# -------------------
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: nginx
 spec:
   rules:
-    - host: cesarbuitragorey.application.com
+    - host: cbuitrago.application.com
       http:
         paths:
           - path: /
