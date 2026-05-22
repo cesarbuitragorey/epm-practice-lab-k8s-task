@@ -32,11 +32,11 @@ kind: Service
 metadata:
   name: mongo
 spec:
-  ports:
-    - port: 80
-      targetPort: 80
   selector:
     app: mongo
+  ports:
+    - port: 27017
+      targetPort: 27017
 
 ---
 # -------------------
@@ -109,7 +109,7 @@ spec:
         - name: application
           image: cesarbuitrago/cbuitrago_application:latest
           ports:
-            - containerPort: 80
+            - containerPort: 5000
 
           resources:
             limits:
@@ -125,16 +125,16 @@ spec:
 
           readinessProbe:
             httpGet:
-              path: /
-              port: 80
+              path: /healthx
+              port: 5000
             initialDelaySeconds: 5
             periodSeconds: 5
 
           livenessProbe:
             httpGet:
-              path: /
-              port: 80
-            initialDelaySeconds: 15
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 10
             periodSeconds: 10
 
       initContainers:
@@ -158,7 +158,7 @@ metadata:
 spec:
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 5000
   selector:
     app: application
 
