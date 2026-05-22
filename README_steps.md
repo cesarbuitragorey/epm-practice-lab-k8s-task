@@ -152,8 +152,10 @@ kubectl apply -f manifest.yml
 kubectl get pods
 kubectl get svc
 kubectl get ingress
+# acceder a la app y bd
 
-
+kubectl port-forward svc/application 8080:80
+http://localhost:8080/test_db
 ###############################
 # 🔹 9. CONFIGURAR INGRESS
 ###############################

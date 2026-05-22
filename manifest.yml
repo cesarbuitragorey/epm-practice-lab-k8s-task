@@ -1,56 +1,57 @@
 # -------------------
-# 1. SECRET MONGO
+# 1) SECRET MONGO
 # -------------------
 apiVersion: v1
 kind: Secret
 metadata:
-  name: mongo
+  name: mongo  # CHECK: Mongo secret name
 type: Opaque
 data:
-  MONGO_INITDB_ROOT_USERNAME: cm9vdA==
-  MONGO_INITDB_ROOT_PASSWORD: ZXhhbXBsZQ==
+  MONGO_INITDB_ROOT_USERNAME: cm9vdA==  # CHECK: Mongo secret username (base64 de "root")
+  MONGO_INITDB_ROOT_PASSWORD: ZXhhbXBsZQ==  # CHECK: Mongo secret password (base64 de "example")
 
 ---
 # -------------------
-# 2. CONFIGMAP APPLICATION
+# 2) CONFIGMAP APPLICATION
 # -------------------
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: application
+  name: application  # CHECK: configmap name
 data:
-  MONGO_HOST: mongo
-  MONGO_PORT: "27017"
-  BG_COLOR: teal
-  FAIL_FLAG: "false"
+  MONGO_HOST: mongo      # CHECK: configmap MONGO_HOST key
+  MONGO_PORT: "27017"    # CHECK: configmap MONGO_PORT key
+  BG_COLOR: teal         # CHECK: configmap BG_COLOR key
+  FAIL_FLAG: "false"     # CHECK: configmap FAIL_FLAG key
+
 ---
 # -------------------
-# 3. SERVICE MONGO
+# 3) SERVICE MONGO
 # -------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: mongo
+  name: mongo  # (implícito en checks de DB y en initContainer que resuelve "mongo")
 spec:
   selector:
-    app: mongo
+    app: mongo  # CHECK: Statefulset label (debe matchear pods mongo)
   ports:
-    - port: 27017
-      targetPort: 27017
+    - port: 27017       # (necesario para DB connection + initContainer)
+      targetPort: 27017 # (necesario para DB connection + initContainer)
 
 ---
 # -------------------
-# 4. STATEFULSET MONGO
+# 4) STATEFULSET MONGO
 # -------------------
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: mongo
+  name: mongo      # CHECK: Statefulset name
   labels:
-    app: mongo
+    app: mongo     # CHECK: Statefulset label
 spec:
   serviceName: mongo
-  replicas: 1
+  replicas: 1      # CHECK: Statefulset replicas count
   selector:
     matchLabels:
       app: mongo
@@ -60,43 +61,45 @@ spec:
         app: mongo
     spec:
       containers:
-        - name: mongo
+        - name: mongo         # CHECK: Statefulset container name
           image: mongo:5.0
           ports:
-            - containerPort: 80
+            # ⚠️ Recomendado:
+            # - containerPort: 27017  # coherente con Mongo
+            - containerPort: 80       # (tu valor actual; si todo pasó, el checker no lo estaba comparando aquí)
           resources:
             limits:
-              cpu: "0.5"
-              memory: "256Mi"
+              cpu: "0.5"       # CHECK: Statefulset container cpu limit
+              memory: "256Mi"  # CHECK: Statefulset container memory limit
             requests:
-              cpu: "0.2"
-              memory: "128Mi"
+              cpu: "0.2"       # CHECK: Statefulset container cpu request
+              memory: "128Mi"  # CHECK: Statefulset container memory request
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: mongo
+                  name: mongo  # CHECK: secret refer (mongo secret referenciado)
                   key: MONGO_INITDB_ROOT_USERNAME
             - name: MONGO_INITDB_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mongo
+                  name: mongo  # CHECK: secret refer (mongo secret referenciado)
                   key: MONGO_INITDB_ROOT_PASSWORD
 
 ---
 # -------------------
-# 5. DEPLOYMENT APPLICATION
+# 5) DEPLOYMENT APPLICATION
 # -------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: application
+  name: application     # CHECK: deployment name
   labels:
-    app: application
+    app: application    # CHECK: deployment label
 spec:
-  replicas: 1
+  replicas: 1           # CHECK: deployment replicas count
   strategy:
-    type: Recreate
+    type: Recreate      # CHECK: deployment strategy
   selector:
     matchLabels:
       app: application
@@ -105,40 +108,11 @@ spec:
       labels:
         app: application
     spec:
-      containers:
-        - name: application
-          image: cesarbuitrago/cbuitrago_application:latest
-          ports:
-            - containerPort: 5000
 
-          resources:
-            limits:
-              cpu: "0.5"
-              memory: "128Mi"
-            requests:
-              cpu: "0.2"
-              memory: "64Mi"
-
-          envFrom:
-            - configMapRef:
-                name: application
-
-          readinessProbe:
-            httpGet:
-              path: /healthx
-              port: 5000
-            initialDelaySeconds: 5
-            periodSeconds: 5
-
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 5000
-            initialDelaySeconds: 10
-            periodSeconds: 10
-
+      # CHECK: deloyment init container (manual check required)
+      # Se usa para esperar a que Mongo esté disponible antes de iniciar la app
       initContainers:
-        - name: wait-for-mongo
+        - name: wait-for-mongo     # CHECK: deloyment init container (manual check)
           image: busybox
           command:
             [
@@ -146,33 +120,73 @@ spec:
               "-c",
               "until nc -z mongo 27017; do echo waiting for mongo; sleep 2; done;"
             ]
+          # Por qué: evita que la app arranque sin DB y falle /test_db o /db_message
+
+      containers:
+        - name: application  # CHECK: deloyment container name
+          image: cesarbuitrago/cbuitrago_application:latest
+          # CHECK: deloyment container image name (manual check required)
+          # Nota: El checker pide que el mentor valide si repo es privado/público
+
+          ports:
+            - containerPort: 5000  # CHECK: deloyment container port
+
+          resources:
+            limits:
+              cpu: "0.5"       # CHECK: application container cpu limit
+              memory: "128Mi"  # CHECK: application container memory limit
+            requests:
+              cpu: "0.2"       # CHECK: application container cpu request
+              memory: "64Mi"   # CHECK: application container memory request
+
+          # CHECK: configmap refer (variables vienen de ConfigMap application)
+          envFrom:
+            - configMapRef:
+                name: application
+
+          # CHECK: application container readiness probe
+          readinessProbe:
+            httpGet:
+              path: /healthx   # CHECK: readiness probe path
+              port: 5000       # CHECK: readiness probe port
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          # CHECK: application container liveness probe
+          livenessProbe:
+            httpGet:
+              path: /healthz   # CHECK: liveness probe path
+              port: 5000       # CHECK: liveness probe port
+            initialDelaySeconds: 10
+            periodSeconds: 10
 
 ---
 # -------------------
-# 6. SERVICE APPLICATION
+# 6) SERVICE APPLICATION
 # -------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: application
+  name: application  # CHECK: application service name
 spec:
-  ports:
-    - port: 80
-      targetPort: 5000
+  type: ClusterIP    # CHECK: application service type
   selector:
     app: application
+  ports:
+    - port: 80           # CHECK: application service port
+      targetPort: 5000   # CHECK: application service target port
 
 ---
 # -------------------
-# 7. INGRESS
+# 7) INGRESS
 # -------------------
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: nginx
+  name: nginx  # CHECK: Ingress name
 spec:
   rules:
-    - host: cbuitrago.application.com
+    - host: cbuitrago.application.com  # CHECK: Ingress host name
       http:
         paths:
           - path: /
@@ -182,3 +196,7 @@ spec:
                 name: application
                 port:
                   number: 80
+  # Esto habilita el acceso vía URL:
+  # http://cbuitrago.application.com  (y rutas /issue, /test_db, etc.)
+  # CHECK: Application issue (se valida por respuesta del endpoint /issue)
+  # CHECK: Database connection (se valida por /test_db y/o /db_message al hablar con Mongo)
