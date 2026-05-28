@@ -64,9 +64,8 @@ spec:
         - name: mongo         # CHECK: Statefulset container name
           image: mongo:5.0
           ports:
-            # ⚠️ Recomendado:
-            # - containerPort: 27017  # coherente con Mongo
-            - containerPort: 80       # (tu valor actual; si todo pasó, el checker no lo estaba comparando aquí)
+            # - containerPort: 27017  # 
+            - containerPort: 80       # CHECK: Statefulset container port (readiness probe) 
           resources:
             limits:
               cpu: "0.5"       # CHECK: Statefulset container cpu limit
@@ -197,6 +196,6 @@ spec:
                 port:
                   number: 80
   # Esto habilita el acceso vía URL:
-  # http://cbuitrago.application.com  (y rutas /issue, /test_db, etc.)
   # CHECK: Application issue (se valida por respuesta del endpoint /issue)
   # CHECK: Database connection (se valida por /test_db y/o /db_message al hablar con Mongo)
+  

@@ -26,13 +26,6 @@ epm-practice-lab-k8s-task/
 │   ├── service.yaml
 │   └── secret.yaml
 │
-├── k8s/                       # Manifiestos principales de Kubernetes
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   ├── configmap.yaml
-│   ├── ingress.yaml
-│   ├── statefulset.yaml
-│   └── manifest.yml           # (archivo consolidado que usaste)
 │
 ├── utils/                     # Scripts auxiliares del lab
 │   └── local_minikube_preparation.sh
@@ -46,44 +39,6 @@ epm-practice-lab-k8s-task/
 ├── README.md                  # Documentación (lo que estás armando)
 │
 └── .gitignore
-###############################
-# 🔹 1. LIMPIEZA DEL ENTORNO
-###############################
-
-# Eliminar recursos Docker antiguos (libera espacio y evita conflictos)
-docker system prune -af
-docker volume prune -f
-
-# Ajustar límites del sistema (necesario para apps con muchos eventos de archivos)
-sudo sysctl fs.inotify.max_user_watches=524288
-sudo sysctl fs.inotify.max_user_instances=8192
-
-# Persistir configuración en el sistema
-echo "fs.inotify.max_user_watches=524288" | sudo tee -a /etc/sysctl.conf
-echo "fs.inotify.max_user_instances=8192" | sudo tee -a /etc/sysctl.conf
-
-# Aplicar cambios inmediatamente
-sudo sysctl -p
-
-
-###############################
-# 🔹 2. REINICIAR MINIKUBE
-###############################
-
-# Elimina cluster previo (limpio)
-minikube delete -p minikube-cbuitrago
-
-# Crear cluster nuevo con Docker driver
-minikube start -p minikube-cbuitrago --driver=docker
-
-
-###############################
-# 🔹 3. CONTEXTO KUBERNETES
-###############################
-
-# Cambiar al contexto del cluster creado
-kubectl config use-context minikube-cbuitrago
-
 
 ###############################
 # 🔹 4. BUILD Y PUBLICACIÓN DOCKER
@@ -120,7 +75,7 @@ curl http://localhost:5000/db_message
 
 
 ###############################
-# 🔹 6. LINT DEL DOCKERFILE
+# 🔹 6. Docker
 ###############################
 
 # Validar buenas prácticas del Dockerfile
@@ -139,15 +94,66 @@ chmod +x ./utils/local_minikube_preparation.sh
 
 # Usar el contexto generado
 kubectl config use-context minikube-cbuitrago
+###############################
+# 🔹 1. LIMPIEZA DEL ENTORNO
+###############################
 
+# Eliminar recursos Docker antiguos (libera espacio y evita conflictos)
+docker system prune -af
+docker volume prune -f
+minikube delete --all
+
+# Ajustar límites del sistema (necesario para apps con muchos eventos de archivos)
+sudo sysctl fs.inotify.max_user_watches=524288
+sudo sysctl fs.inotify.max_user_instances=8192
+ulimit -n 65536
+
+# Persistir configuración en el sistema
+echo "fs.inotify.max_user_watches=524288" | sudo tee -a /etc/sysctl.conf
+echo "fs.inotify.max_user_instances=8192" | sudo tee -a /etc/sysctl.conf
+
+# Aplicar cambios inmediatamente
+sudo sysctl -p
+
+
+###############################
+# 🔹 2. REINICIAR MINIKUBE
+###############################
+
+# Elimina cluster previo (limpio)
+minikube delete -p minikube-cbuitrago
+
+# Crear cluster nuevo con Docker driver
+./local_minikube_preparation.sh "Cesar Buitrago"
+
+minikube start -p minikube-cbuitrago --driver=docker
+
+
+###############################
+# 🔹 3. CONTEXTO KUBERNETES
+###############################
+
+# Cambiar al contexto del cluster creado
+kubectl config use-context minikube-cbuitrago
 
 ###############################
 # 🔹 8. DESPLEGAR EN K8S
 ###############################
 
+# Eliminar y recrear deployment
+kubectl delete deployment application
+kubectl delete svc application
+kubectl apply -f manifest.yml
 # Aplicar manifiestos (deployment, service, configmap, ingress, etc)
 kubectl apply -f manifest.yml
-
+minikube addons enable ingress -p minikube-cbuitrago
+# host ingress config
+minikube profile list
+minikube -p minikube-cbuitrago ip
+192.168.49.2
+kubectl get ingress
+cbuitrago.application.com
+sudo nano /etc/hosts
 # Verificar recursos
 kubectl get pods
 kubectl get svc
@@ -156,6 +162,24 @@ kubectl get ingress
 
 kubectl port-forward svc/application 8080:80
 http://localhost:8080/test_db
+curl http://cbuitrago.application.com/db_message
+curl -X POST http://cbuitrago.application.com/test_db \
+  -d "name=test&message=hello"
+
+  # Ejecutar pruebas automáticas del laboratorio
+  kubectl get all
+    kubectl port-forward svc/application 8080:80
+./final-check -test-suite 'final_task' -student "Cesar Buitrago"
+# troubleshooting 
+kubectl get pods
+kubectl describe pod application-7fb6b8c9dd-7twzd
+kubectl logs application-7fb6b8c9dd-7twzd
+kubectl describe ingress nginx
+kubectl delete pod -l app=application
+kubectl get pods -n ingress-nginx
+
+
+
 ###############################
 # 🔹 9. CONFIGURAR INGRESS
 ###############################
@@ -230,7 +254,11 @@ kubectl delete pod -l app=application
 kubectl get ingress
 kubectl describe ingress nginx
 
-
+# host ingress config
+minikube ip
+kubectl get ingress
+cbuitrago.application.com
+sudo nano /etc/hosts
 ###############################
 # 🔹 14. RECREAR DEPLOYMENT
 ###############################
@@ -315,8 +343,9 @@ docker tag cesarbuitrago/cesarbuitragorey_application:latest cbuitrago_applicati
 kubectl get pods
 kubectl describe pod application-7fb6b8c9dd-7twzd
 kubectl logs application-7fb6b8c9dd-7twzd
-
+kubectl describe ingress nginx
 kubectl delete pod -l app=application
+kubectl get pods -n ingress-nginx
 kubectl get ingress
 minikube ip -p minikube-cbuitrago
 C:\Windows\System32\drivers\etc\hosts
@@ -334,3 +363,25 @@ curl http://cbuitrago.application.com/db_message
 # checker
 ./final-check -test-suite 'final_task' -student "Cesar Buitrago"
 #!/bin/bash
+
+# ArgoCD
+kubectl apply -n argocd \
+  --server-side \
+  --force-conflicts \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+  kubectl delete ns argocd
+
+kubectl create namespace argocd
+
+kubectl apply -n argocd \
+  --server-side \
+  --force-conflicts \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+kubectl get pods -n argocd
+
+kubectl port-forward svc/argocd-server -n argocd 8081:443
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath="{.data.password}" | base64 -d
+6rHinu9BmF2ry7Tk
