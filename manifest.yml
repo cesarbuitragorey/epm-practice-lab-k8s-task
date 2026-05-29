@@ -96,7 +96,7 @@ metadata:
   labels:
     app: application    # CHECK: deployment label
 spec:
-  replicas: 1           # CHECK: deployment replicas count
+  replicas: 3           # CHECK: deployment replicas count
   strategy:
     type: Recreate      # CHECK: deployment strategy
   selector:
